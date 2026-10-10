@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.streamlit/
+outputs/*
+!outputs/.gitkeep
+.cache/
+.DS_Store
+*.pt
+*.pth
+*.ckpt
+data/

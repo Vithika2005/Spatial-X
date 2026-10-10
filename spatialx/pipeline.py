@@ -8,6 +8,7 @@ import torch
 _DEPTH_PIPE = None
 _CLIP_MODEL = None
 _CLIP_PROCESSOR = None
+_DETECTOR = None
 
 def choose_device():
     if torch.backends.mps.is_available():
@@ -15,9 +16,12 @@ def choose_device():
     return "cpu"
 
 def _load_detector():
-    from ultralytics import YOLO
-    # COCO-pretrained instance segmentation model; weights download on first run.
-    return YOLO("yolov8n-seg.pt")
+    global _DETECTOR
+    if _DETECTOR is None:
+        from ultralytics import YOLO
+        # COCO-pretrained instance segmentation baseline; weights download on first run.
+        _DETECTOR = YOLO("yolov8n-seg.pt")
+    return _DETECTOR
 
 def _load_depth():
     global _DEPTH_PIPE
@@ -139,6 +143,11 @@ def make_point_cloud(rgb, depth, instances, max_points=20000):
             "rgb":rgb.reshape(-1,3)[flat], "instance_id":ids.ravel()[flat]}
 
 def encode_query_scores(instances, query):
+    """Return cosine similarities between a text prompt and detected object crops.
+
+    These are CLIP embedding similarities, not calibrated probabilities. Values are
+    useful for ranking candidates from the same image, not as confidence estimates.
+    """
     global _CLIP_MODEL, _CLIP_PROCESSOR
     try:
         from transformers import CLIPModel, CLIPProcessor
@@ -148,11 +157,14 @@ def encode_query_scores(instances, query):
             _CLIP_MODEL = CLIPModel.from_pretrained(model_id)
             _CLIP_MODEL.eval()
         crops = [x["crop"] for x in instances]
-        inputs = _CLIP_PROCESSOR(text=[query], images=crops, return_tensors="pt", padding=True)
+        image_inputs = _CLIP_PROCESSOR(images=crops, return_tensors="pt", padding=True)
+        text_inputs = _CLIP_PROCESSOR(text=[query], return_tensors="pt", padding=True)
         with torch.no_grad():
-            out = _CLIP_MODEL(**inputs)
-            scores = out.logits_per_image[:,0]
-            scores = scores.softmax(dim=0)
+            image_features = _CLIP_MODEL.get_image_features(**image_inputs)
+            text_features = _CLIP_MODEL.get_text_features(**text_inputs)
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            scores = (image_features @ text_features.T).squeeze(-1)
         return scores.cpu().numpy()
     except Exception:
         return None

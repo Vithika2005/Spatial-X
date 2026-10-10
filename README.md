@@ -1,4 +1,4 @@
-# SPATIAL-X — Open-Vocabulary 3D Object Detection & Instance Segmentation
+# SPATIAL-X — Interactive 2D-to-3D Research Workbench
 
 **A Mac-first deep-learning research project** combining 2D instance segmentation, monocular depth, 3D point-cloud lifting, text-guided object search, and an interactive demo.
 
@@ -200,3 +200,32 @@ Follow the code license for every external project and the terms for every datas
 ## Reproducibility exports (updated)
 
 Click **Save reproducibility bundle to outputs/**. Exports include the point cloud as PLY/NPZ/CSV, raw depth, CLIP query scores when used, per-stage timings, package versions, run configuration, and evaluation metrics. Metrics requiring ground truth remain null with status `not_evaluated` until the appropriate benchmark evaluator is run. See `docs/EXPORTS_AND_EVALUATION.md`.
+
+
+## Version 3 — Beginner-friendly research workbench
+
+Version 3 improves the app's explanations and visualizations. It includes confidence charts, object tables, a clearer relative-depth explanation, point-cloud coloring by instance or source RGB, per-stage latency charts, downloadable run summaries, and a research tracker that distinguishes the runnable baselines from paper methods that are not yet implemented. CLIP text matching uses cosine similarity for ranking; these scores are not probabilities.
+
+### Launch
+
+```bash
+source .venv/bin/activate
+streamlit run app.py
+```
+
+### What is implemented vs. planned?
+
+| Component | Status | Honest interpretation |
+|---|---|---|
+| YOLOv8-seg | Runnable pretrained baseline | 2D masks and labels; not SAM/SAM 2 |
+| MiDaS via Transformers | Optional pretrained baseline | Relative depth estimate; not guaranteed metric depth |
+| Point-cloud lifting | Implemented geometry visualization | Approximate coordinates with guessed intrinsics; not a calibrated reconstruction |
+| CLIP ViT-B/32 | Optional text/crop retrieval baseline | Ranks detected crops by cosine similarity; not LERF |
+| Splatter Image | Planned | Not implemented/reproduced in this repository |
+| LERF | Planned | Not implemented/reproduced in this repository |
+| MonoDETR / MonoDTR | Planned | Not producing 3D boxes yet |
+| VoxFormer | Planned | No semantic occupancy prediction yet |
+| 4D Gaussian Splatting | Planned | Video frame selection is not 4D reconstruction |
+| SAM / SAM 2 | Planned | Current masks come from YOLOv8-seg |
+
+See `docs/RESEARCH_IMPLEMENTATION_STATUS.md` before describing the project in a poster or paper. The reference papers are different methods with different inputs, training code, datasets, and evaluation protocols. They cannot be truthfully described as all implemented merely because the app has a 3D plot.

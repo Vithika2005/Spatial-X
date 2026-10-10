@@ -195,3 +195,8 @@ Apple Silicon supports PyTorch MPS for many operations, but that does not make C
 ## License and academic integrity
 
 Follow the code license for every external project and the terms for every dataset/model checkpoint. Cite the original papers. Distinguish pretrained inference, code adaptation, reproduced paper components, and your own contribution in the report.
+
+
+## Reproducibility exports (updated)
+
+Click **Save reproducibility bundle to outputs/**. Exports include the point cloud as PLY/NPZ/CSV, raw depth, CLIP query scores when used, per-stage timings, package versions, run configuration, and evaluation metrics. Metrics requiring ground truth remain null with status `not_evaluated` until the appropriate benchmark evaluator is run. See `docs/EXPORTS_AND_EVALUATION.md`.

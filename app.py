@@ -55,6 +55,7 @@ start = time.perf_counter()
 with st.spinner("Running instance segmentation and optional spatial models..."):
     result = analyze_image(rgb, confidence=conf, image_size=image_size, estimate_depth=use_depth)
 elapsed = time.perf_counter() - start
+result.setdefault("timings", {})["ui_total_wall_seconds"] = elapsed
 
 col1, col2 = st.columns(2)
 with col1:
@@ -79,9 +80,13 @@ else:
 if use_clip and instances:
     query = st.text_input("Text query", placeholder="e.g. chair, red bag, monitor")
     if query.strip():
+        clip_start = time.perf_counter()
         with st.spinner("Ranking detected object crops with CLIP..."):
             scores = encode_query_scores(instances, query.strip())
+        result["timings"]["clip_query_seconds"] = time.perf_counter() - clip_start
         if scores is not None:
+            result["query_scores"] = [float(v) for v in scores]
+            result["query_text"] = query.strip()
             for inst, score in zip(instances, scores):
                 inst["text_score"] = float(score)
             best = int(np.argmax(scores))
@@ -91,8 +96,11 @@ if use_clip and instances:
             st.warning("CLIP could not load. Check network access and dependencies.")
 
 st.subheader("3D point cloud")
+points = None
 if result.get("depth") is not None:
+    point_start = time.perf_counter()
     points = make_point_cloud(rgb, result["depth"], instances, max_points=max_points)
+    result["timings"]["point_cloud_seconds"] = time.perf_counter() - point_start
     if points is not None and len(points["xyz"]):
         cloud = pd.DataFrame({"X":points["xyz"][:,0], "Y":points["xyz"][:,1], "Z":points["xyz"][:,2],
                               "R":points["rgb"][:,0], "G":points["rgb"][:,1], "B":points["rgb"][:,2],
@@ -110,7 +118,16 @@ if result.get("depth") is not None:
 else:
     st.info("Enable depth estimation to construct the 3D point cloud.")
 
-if st.button("Save outputs to outputs/"):
-    paths = save_outputs(result, upload.name)
-    st.success("Saved: " + ", ".join(str(p) for p in paths))
+st.subheader("Reproducibility record")
+with st.expander("Per-stage latency and configuration", expanded=False):
+    st.json({"timings_seconds": result.get("timings", {}),
+             "configuration": {"confidence": conf, "image_size": image_size, "max_points": max_points,
+                               "use_depth": use_depth, "use_clip": use_clip}})
+
+if st.button("Save reproducibility bundle to outputs/"):
+    paths = save_outputs(result, upload.name, points=points,
+        query_scores=result.get("query_scores"), query_text=result.get("query_text"),
+        run_config={"confidence": conf, "image_size": image_size, "max_points": max_points,
+                    "use_depth": use_depth, "use_clip": use_clip})
+    st.success("Saved reproducibility artifacts.")
     st.json({k:str(v) for k,v in paths.items()})

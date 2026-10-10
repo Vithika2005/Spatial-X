@@ -50,9 +50,13 @@ def _overlay(rgb, instances):
 
 def analyze_image(rgb, confidence=0.25, image_size=640, estimate_depth=True):
     rgb = np.asarray(rgb).astype(np.uint8)
-    started = time.perf_counter()
+    total_started = time.perf_counter()
+    timings = {}
+    stage_started = time.perf_counter()
     model = _load_detector()
     pred = model.predict(source=rgb, conf=confidence, imgsz=image_size, verbose=False)[0]
+    timings["segmentation_seconds"] = time.perf_counter() - stage_started
+    stage_started = time.perf_counter()
     instances = []
     if pred.boxes is not None and len(pred.boxes):
         boxes = pred.boxes.xyxy.detach().cpu().numpy()
@@ -79,7 +83,9 @@ def analyze_image(rgb, confidence=0.25, image_size=640, estimate_depth=True):
             instances.append({"instance_id":i+1, "label":str(names[int(cls)]), "class_id":int(cls),
                 "confidence":float(score), "box":[x1,y1,x2,y2], "mask":m, "crop":crop})
     overlay = _overlay(rgb, instances)
+    timings["postprocess_and_overlay_seconds"] = time.perf_counter() - stage_started
     depth = depth_vis = None
+    stage_started = time.perf_counter()
     if estimate_depth:
         try:
             depth_pipe = _load_depth()
@@ -95,8 +101,12 @@ def analyze_image(rgb, confidence=0.25, image_size=640, estimate_depth=True):
         except Exception as exc:
             # Keep the segmentation app useful even if optional depth model fails.
             depth = depth_vis = None
+            timings["depth_error"] = repr(exc)
+    timings["depth_seconds"] = time.perf_counter() - stage_started
+    timings["total_pipeline_seconds"] = time.perf_counter() - total_started
     return {"rgb":rgb, "overlay":overlay, "instances":instances, "depth":depth,
-            "depth_vis":depth_vis, "inference_seconds":time.perf_counter()-started}
+            "depth_vis":depth_vis, "timings":timings, "inference_seconds":timings["total_pipeline_seconds"],
+            "query_scores":None, "query_text":None}
 
 def make_point_cloud(rgb, depth, instances, max_points=20000):
     if depth is None:
@@ -147,18 +157,8 @@ def encode_query_scores(instances, query):
     except Exception:
         return None
 
-def save_outputs(result, original_name):
-    out = Path("outputs"); out.mkdir(exist_ok=True)
-    stem = Path(original_name).stem.replace(" ", "_")
-    paths = {}
-    overlay_path = out / f"{stem}_overlay.png"
-    result["overlay"].save(overlay_path); paths["overlay"] = overlay_path
-    if result.get("depth_vis") is not None:
-        depth_path = out / f"{stem}_depth.png"
-        result["depth_vis"].save(depth_path); paths["depth"] = depth_path
-    summary = {"inference_seconds":result.get("inference_seconds"),
-               "instances":[{k:v for k,v in x.items() if k not in ("mask","crop")} for x in result["instances"]]}
-    metrics_path = out / f"{stem}_metrics.json"
-    metrics_path.write_text(__import__("json").dumps(summary, indent=2))
-    paths["metrics"] = metrics_path
-    return paths
+def save_outputs(result, original_name, points=None, query_scores=None, query_text=None, run_config=None, evaluation_metrics=None):
+    from spatialx.reproducibility import save_reproducibility_bundle
+    return save_reproducibility_bundle(result, original_name, points=points,
+        query_scores=query_scores, query_text=query_text, run_config=run_config,
+        evaluation_metrics=evaluation_metrics)
